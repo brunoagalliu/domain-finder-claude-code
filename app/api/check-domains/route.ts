@@ -33,9 +33,9 @@ export async function POST(req: NextRequest) {
   const response = await proxyFetch(`${NAMECHEAP_API_URL}?${params}`);
   const xml = await response.text();
 
-  if (xml.includes('<Error')) {
+  if (xml.includes('Status="ERROR"')) {
     const errorMatch = xml.match(/<Error[^>]*>([^<]+)<\/Error>/);
-    const msg = errorMatch ? errorMatch[1] : xml.slice(0, 300);
+    const msg = errorMatch ? errorMatch[1] : 'Unknown Namecheap error';
     console.error('[check-domains] Namecheap error:', msg);
     return NextResponse.json({ error: `Namecheap: ${msg}` }, { status: 502 });
   }
