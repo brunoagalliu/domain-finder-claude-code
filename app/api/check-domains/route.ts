@@ -34,12 +34,10 @@ export async function POST(req: NextRequest) {
   const xml = await response.text();
 
   if (xml.includes('<Error')) {
-    const errorMatch = xml.match(/<Error[^>]*Number="(\d+)"[^>]*>([^<]+)<\/Error>/);
-    const msg = errorMatch
-      ? `Namecheap error ${errorMatch[1]}: ${errorMatch[2]}`
-      : `Namecheap API error — outgoing IP: ${NAMECHEAP_CLIENT_IP}`;
-    console.error('[check-domains]', msg, '\nRaw XML:', xml.slice(0, 500));
-    return NextResponse.json({ error: msg }, { status: 502 });
+    const errorMatch = xml.match(/<Error[^>]*>([^<]+)<\/Error>/);
+    const msg = errorMatch ? errorMatch[1] : xml.slice(0, 300);
+    console.error('[check-domains] Namecheap error:', msg);
+    return NextResponse.json({ error: `Namecheap: ${msg}` }, { status: 502 });
   }
 
   const results: { domain: string; available: boolean; isPremium: boolean; price: string | null }[] = [];
