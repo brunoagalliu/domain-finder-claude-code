@@ -89,7 +89,9 @@ function HistoryPanel({ history, onClear }: { history: HistoryEntry[]; onClear: 
       <div className="divide-y divide-gray-800/50">
         {history.map(h => {
           const isOpen = expanded.has(h.id);
-          const total = h.available.length + h.taken.length;
+          const available = h.available ?? [];
+          const taken = h.taken ?? [];
+          const total = available.length + taken.length;
           return (
             <div key={h.id} className="bg-gray-900/50">
               {/* Summary row — click to expand */}
@@ -103,7 +105,7 @@ function HistoryPanel({ history, onClear }: { history: HistoryEntry[]; onClear: 
                 </div>
                 <div className="flex items-center gap-3 mt-1.5">
                   <span className="text-xs text-gray-500">{new Date(h.timestamp).toLocaleString()}</span>
-                  <span className="text-xs text-emerald-400 font-medium">{h.available.length} available</span>
+                  <span className="text-xs text-emerald-400 font-medium">{available.length} available</span>
                   <span className="text-xs text-gray-600">{total} checked</span>
                 </div>
               </button>
@@ -111,19 +113,19 @@ function HistoryPanel({ history, onClear }: { history: HistoryEntry[]; onClear: 
               {/* Expanded detail */}
               {isOpen && (
                 <div className="px-4 pb-4 border-t border-gray-800/50">
-                  {h.available.length > 0 && (
+                  {available.length > 0 && (
                     <div className="mt-3">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest">Available</p>
                         <button
-                          onClick={() => copyAvailable(h.id, h.available)}
+                          onClick={() => copyAvailable(h.id, available)}
                           className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
                         >
                           {copied === h.id ? 'Copied!' : 'Copy all'}
                         </button>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {h.available.map(d => (
+                        {available.map(d => (
                           <span key={d} className="font-mono text-xs text-white bg-emerald-950/40 border border-emerald-900/50 px-2 py-1 rounded">
                             {d}
                           </span>
@@ -132,11 +134,11 @@ function HistoryPanel({ history, onClear }: { history: HistoryEntry[]; onClear: 
                     </div>
                   )}
 
-                  {h.taken.length > 0 && (
+                  {taken.length > 0 && (
                     <div className="mt-3">
                       <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-2">Taken</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {h.taken.map(d => (
+                        {taken.map(d => (
                           <span key={d} className="font-mono text-xs text-gray-600 bg-gray-800/50 px-2 py-1 rounded">
                             {d}
                           </span>
