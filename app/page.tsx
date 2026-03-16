@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 type Suggestion = {
   domain: string;
@@ -23,6 +24,12 @@ export default function Home() {
   const [checking, setChecking] = useState(false);
   const [results, setResults] = useState<DomainResult[]>([]);
   const [error, setError] = useState('');
+  const router = useRouter();
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+  }
 
   async function handleBrainstorm() {
     if (!description.trim()) return;
@@ -94,9 +101,17 @@ export default function Home() {
   return (
     <main className="max-w-3xl mx-auto px-4 py-12">
       {/* Header */}
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-white tracking-tight">Domain Finder</h1>
-        <p className="text-gray-400 mt-1">Describe your business, get AI-generated domain ideas, check availability.</p>
+      <div className="flex items-start justify-between mb-10">
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Domain Finder</h1>
+          <p className="text-gray-400 mt-1">Describe your business, get AI-generated domain ideas, check availability.</p>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="text-xs text-gray-500 hover:text-gray-300 mt-1 transition-colors"
+        >
+          Sign out
+        </button>
       </div>
 
       {/* Step 1: Brainstorm */}
