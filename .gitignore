@@ -2,3 +2,5 @@
 .env
 node_modules/
 results/
+.next/
+next-env.d.ts
