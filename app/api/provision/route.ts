@@ -69,7 +69,10 @@ export async function POST(req: NextRequest) {
   if (dnsRes.success) {
     steps.push({ name: 'Add A record', status: 'ok' });
   } else {
-    const duplicate = dnsRes.errors?.some((e: { code: number }) => e.code === 81057);
+    const duplicate = dnsRes.errors?.some(
+      (e: { code: number; message?: string }) =>
+        e.code === 81057 || e.message?.toLowerCase().includes('already')
+    );
     steps.push({
       name: 'Add A record',
       status: duplicate ? 'ok' : 'error',
