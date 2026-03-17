@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     SLD: sld,
     TLD: tld,
   });
-  nameservers.forEach((ns, i) => params.set(`Nameserver${i + 1}`, ns));
+  params.set('Nameservers', nameservers.join(','));
 
   const proxyFetch = makeProxyFetch();
   const nsRes = await proxyFetch(`${NC}?${params}`);
