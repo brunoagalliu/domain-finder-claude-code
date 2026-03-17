@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 type Tier = 'top' | 'strong' | 'wildcard';
 
@@ -273,6 +274,9 @@ export default function Home() {
               {showHistory ? 'Hide history' : `History (${history.length})`}
             </button>
           )}
+          <Link href="/provision" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+            Provision
+          </Link>
           <button onClick={handleLogout} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
             Sign out
           </button>
