@@ -38,7 +38,9 @@ export async function POST(req: NextRequest) {
     steps.push({ name: 'Add to Cloudflare', status: 'ok' });
   } else {
     const alreadyExists = zoneRes.errors?.some(
-      (e: { code: number }) => e.code === 1049 || e.code === 1097
+      (e: { code: number; message?: string }) =>
+        e.code === 1049 || e.code === 1061 || e.code === 1097 ||
+        e.message?.toLowerCase().includes('already')
     );
     if (alreadyExists) {
       const existing = await cfetch(`/zones?name=${domain}`, 'GET');
