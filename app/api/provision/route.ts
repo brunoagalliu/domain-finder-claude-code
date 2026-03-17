@@ -115,11 +115,13 @@ export async function POST(req: NextRequest) {
   const nsRes = await proxyFetch(`${NC}?${params}`);
   const nsXml = await nsRes.text();
   const nsOk = nsXml.includes('Update="true"') || (nsXml.includes('Status="OK"') && !nsXml.includes('Status="ERROR"'));
+  const nsErrorMatch = nsXml.match(/<Error[^>]*>([^<]+)<\/Error>/);
+  const nsErrorMsg = nsErrorMatch ? nsErrorMatch[1].trim() : nsXml.slice(0, 200);
 
   steps.push({
     name: 'Set nameservers',
     status: nsOk ? 'ok' : 'error',
-    detail: nsOk ? nameservers.join(', ') : 'Namecheap rejected the nameserver update',
+    detail: nsOk ? nameservers.join(', ') : nsErrorMsg,
   });
 
   return NextResponse.json({ nameservers, steps });
