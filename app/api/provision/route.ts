@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   const proxyFetch = makeProxyFetch();
   const nsRes = await proxyFetch(`${NC}?${params}`);
   const nsXml = await nsRes.text();
-  const nsOk = nsXml.includes('Updated="true"') || (nsXml.includes('Status="OK"') && !nsXml.includes('Status="ERROR"'));
+  const nsOk = nsXml.includes('Update="true"') || (nsXml.includes('Status="OK"') && !nsXml.includes('Status="ERROR"'));
 
   steps.push({
     name: 'Set nameservers',
