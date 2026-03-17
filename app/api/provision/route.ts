@@ -49,7 +49,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ steps }, { status: 500 });
       }
       zoneId = existing.result[0].id;
-      nameservers = existing.result[0].name_servers;
+      // Fetch full zone details to ensure name_servers is populated
+      const zoneDetail = await cfetch(`/zones/${zoneId}`, 'GET');
+      nameservers = zoneDetail.result?.name_servers ?? existing.result[0].name_servers ?? [];
+      console.log('[provision] existing zone nameservers:', nameservers);
       steps.push({ name: 'Add to Cloudflare', status: 'ok', detail: 'Zone already existed' });
     } else {
       steps.push({ name: 'Add to Cloudflare', status: 'error', detail: zoneRes.errors?.[0]?.message });
@@ -115,6 +118,7 @@ export async function POST(req: NextRequest) {
   const nsRes = await proxyFetch(`${NC}?${params}`);
   const nsXml = await nsRes.text();
   const nsOk = nsXml.includes('Update="true"') || (nsXml.includes('Status="OK"') && !nsXml.includes('Status="ERROR"'));
+  console.log('[provision] namecheap NS xml:', nsXml.slice(0, 400));
   const nsErrorMatch = nsXml.match(/<Error[^>]*>([^<]+)<\/Error>/);
   const nsErrorMsg = nsErrorMatch ? nsErrorMatch[1].trim() : nsXml.slice(0, 200);
 
