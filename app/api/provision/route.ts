@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     type: 'A',
     name: domain,
     content: ip,
-    ttl: 3600,
+    ttl: 1,
     proxied: false,
   });
 
