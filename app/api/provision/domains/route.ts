@@ -10,10 +10,11 @@ export type NamecheapDomain = {
 };
 
 function parseDomainsFromXml(xml: string): NamecheapDomain[] {
-  const matches = [...xml.matchAll(/<Domain\s([^/]+)\/>/g)];
-  return matches.map(m => {
-    const attrs = m[1];
-    const get = (key: string) => (attrs.match(new RegExp(`${key}="([^"]*)"`)))?.[1] ?? '';
+  // Match full <Domain ... /> tags (dates like 02/10/2020 contain slashes, so we can't use [^/])
+  const tags = [...xml.matchAll(/<Domain\s[\s\S]*?\/>/g)];
+  return tags.map(m => {
+    const tag = m[0];
+    const get = (key: string) => (tag.match(new RegExp(`${key}="([^"]*)"`)))?.[1] ?? '';
     return {
       name: get('Name').toLowerCase(),
       isOurDNS: get('IsOurDNS') === 'true',
