@@ -7,6 +7,7 @@ export type NamecheapDomain = {
   name: string;
   isOurDNS: boolean;
   expires: string;
+  created: string;
 };
 
 function parseDomainsFromXml(xml: string): NamecheapDomain[] {
@@ -19,6 +20,7 @@ function parseDomainsFromXml(xml: string): NamecheapDomain[] {
       name: get('Name').toLowerCase(),
       isOurDNS: get('IsOurDNS') === 'true',
       expires: get('Expires'),
+      created: get('Created'),
     };
   }).filter(d => d.name);
 }

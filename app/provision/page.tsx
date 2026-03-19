@@ -5,7 +5,15 @@ import Link from 'next/link';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type NamecheapDomain = { name: string; isOurDNS: boolean; expires: string };
+type NamecheapDomain = { name: string; isOurDNS: boolean; expires: string; created: string };
+type SortKey = 'name' | 'created' | 'expires';
+type SortDir = 'asc' | 'desc';
+
+// Parse MM/DD/YYYY dates for comparison
+function parseDate(d: string) {
+  const [m, day, y] = d.split('/');
+  return new Date(+y, +m - 1, +day).getTime() || 0;
+}
 type DomainEntry = NamecheapDomain & { selected: boolean; ip: string };
 type StepResult = { name: string; status: 'ok' | 'error'; detail?: string };
 type JobState = 'pending' | 'running' | 'done' | 'error';
@@ -58,10 +66,27 @@ function Step1({
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteValue, setPasteValue] = useState('');
   const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('created');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const selected = domains.filter(d => d.selected);
   const allSelected = domains.length > 0 && domains.every(d => d.selected);
-  const filtered = domains.filter(d => d.name.includes(search.toLowerCase()));
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  }
+
+  const filtered = useMemo(() => {
+    const list = domains.filter(d => d.name.includes(search.toLowerCase()));
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
+      else if (sortKey === 'created') cmp = parseDate(a.created) - parseDate(b.created);
+      else if (sortKey === 'expires') cmp = parseDate(a.expires) - parseDate(b.expires);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [domains, search, sortKey, sortDir]);
 
   async function fetchFromNamecheap() {
     setLoading(true);
@@ -84,7 +109,7 @@ function Step1({
       .split('\n')
       .map(l => l.trim().toLowerCase())
       .filter(Boolean)
-      .map(name => ({ name, isOurDNS: true, expires: '', selected: true, ip: '' }));
+      .map(name => ({ name, isOurDNS: true, created: '', expires: '', selected: true, ip: '' }));
     setDomains(entries);
     setPasteMode(false);
     setPasteValue('');
@@ -165,29 +190,46 @@ function Step1({
           </div>
 
           {/* Domain list */}
-          <div className="border border-gray-800 rounded-lg overflow-hidden mb-6 max-h-96 overflow-y-auto">
-            {filtered.map((d, i) => (
-              <label
-                key={d.name}
-                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-800/50 transition-colors ${
-                  i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-900/50'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={d.selected}
-                  onChange={() => toggle(d.name)}
-                  className="accent-indigo-500 flex-shrink-0"
-                />
-                <span className="font-mono text-sm text-white flex-1">{d.name}</span>
-                {!d.isOurDNS && (
-                  <span className="text-xs text-amber-500 bg-amber-950/50 px-1.5 py-0.5 rounded">custom NS</span>
-                )}
-                {d.expires && (
-                  <span className="text-xs text-gray-600">{d.expires}</span>
-                )}
-              </label>
-            ))}
+          <div className="border border-gray-800 rounded-lg overflow-hidden mb-6">
+            {/* Sort headers */}
+            <div className="grid grid-cols-[auto_1fr_100px_100px_80px] items-center bg-gray-900 border-b border-gray-800 px-4 py-2 gap-3">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-indigo-500" />
+              {(['name', 'created', 'expires'] as SortKey[]).map(key => (
+                <button
+                  key={key}
+                  onClick={() => toggleSort(key)}
+                  className={`text-left text-xs font-medium uppercase tracking-wider transition-colors ${
+                    sortKey === key ? 'text-indigo-400' : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  {key} {sortKey === key ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                </button>
+              ))}
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">NS</span>
+            </div>
+            <div className="max-h-96 overflow-y-auto">
+              {filtered.map((d, i) => (
+                <label
+                  key={d.name}
+                  className={`grid grid-cols-[auto_1fr_100px_100px_80px] items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-800/50 transition-colors ${
+                    i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-900/50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={d.selected}
+                    onChange={() => toggle(d.name)}
+                    className="accent-indigo-500 flex-shrink-0"
+                  />
+                  <span className="font-mono text-sm text-white truncate">{d.name}</span>
+                  <span className="text-xs text-gray-500">{d.created}</span>
+                  <span className="text-xs text-gray-500">{d.expires}</span>
+                  {d.isOurDNS
+                    ? <span className="text-xs text-gray-700">default</span>
+                    : <span className="text-xs text-amber-500">custom</span>}
+                </label>
+              ))}
+            </div>
           </div>
 
           <button
