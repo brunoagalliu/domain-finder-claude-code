@@ -84,21 +84,7 @@ export async function POST(req: NextRequest) {
     if (!duplicate) return NextResponse.json({ steps }, { status: 500 });
   }
 
-  // 3. Enable Bot Fight Mode + AI Labyrinth + crawler protection
-  const botRes = await cfetch(`/zones/${zoneId}/bot_management`, 'PUT', {
-    fight_mode: true,
-    enable_js: true,
-    crawler_protection: 'enabled',
-    ai_bots_protection: 'block',
-  });
-
-  steps.push({
-    name: 'Enable security',
-    status: botRes.success ? 'ok' : 'error',
-    detail: botRes.success ? 'Bot Fight Mode + AI Labyrinth' : botRes.errors?.[0]?.message,
-  });
-
-  // 4. Set Cloudflare nameservers in Namecheap
+  // 3. Set Cloudflare nameservers in Namecheap
   const parts = domain.split('.');
   const sld = parts[0];
   const tld = parts.slice(1).join('.');
