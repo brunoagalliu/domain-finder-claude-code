@@ -355,8 +355,8 @@ function Step2({
           onChange={v => setSecurity({ ...security, botFightMode: v })}
         />
         <Toggle
-          label="AI Labyrinth"
-          description="Blocks AI crawlers by serving them a maze of generated pages."
+          label="AI Bots Protection"
+          description="Blocks known AI crawlers (GPTBot, ClaudeBot, etc.) by user agent. Note: AI Labyrinth (honeypot pages) must be enabled separately in Cloudflare dashboard."
           checked={security.aiLabyrinth}
           onChange={v => setSecurity({ ...security, aiLabyrinth: v })}
         />
