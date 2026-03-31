@@ -94,7 +94,11 @@ export async function POST(req: NextRequest) {
     if (security.aiLabyrinth)   calls.push({ label: 'AI Labyrinth',   body: { ai_bots_protection: 'block' } });
 
     const results = await Promise.all(
-      calls.map(c => cfetch(`/zones/${zoneId}/bot_management`, 'PUT', c.body).then(r => ({ ...c, ok: r.success, err: r.errors?.[0]?.message })))
+      calls.map(async c => {
+        const r = await cfetch(`/zones/${zoneId}/bot_management`, 'PUT', c.body);
+        console.log(`[provision] bot_management ${c.label}:`, JSON.stringify(r));
+        return { ...c, ok: r.success, err: r.errors?.[0]?.message };
+      })
     );
     const failed = results.filter(r => !r.ok);
     steps.push({
