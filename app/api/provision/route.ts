@@ -18,8 +18,10 @@ async function cfetch(path: string, method: string, body?: object) {
   return res.json();
 }
 
+type SecuritySettings = { botFightMode?: boolean; aiLabyrinth?: boolean; crawlerProtection?: boolean };
+
 export async function POST(req: NextRequest) {
-  const { domain, ip } = await req.json();
+  const { domain, ip, security = {} as SecuritySettings } = await req.json();
   const steps: StepResult[] = [];
 
   // 1. Add zone to Cloudflare
@@ -84,7 +86,24 @@ export async function POST(req: NextRequest) {
     if (!duplicate) return NextResponse.json({ steps }, { status: 500 });
   }
 
-  // 3. Set Cloudflare nameservers in Namecheap
+  // 3. Apply security settings (if any enabled)
+  const anySecurityEnabled = security.botFightMode || security.aiLabyrinth || security.crawlerProtection;
+  if (anySecurityEnabled) {
+    const botRes = await cfetch(`/zones/${zoneId}/bot_management`, 'PUT', {
+      ...(security.botFightMode ? { fight_mode: true } : {}),
+      ...(security.crawlerProtection ? { enable_js: true } : {}),
+      ...(security.aiLabyrinth ? { ai_bots_protection: 'block' } : {}),
+    });
+    steps.push({
+      name: 'Enable security',
+      status: botRes.success ? 'ok' : 'error',
+      detail: botRes.success
+        ? [security.botFightMode && 'Bot Fight Mode', security.aiLabyrinth && 'AI Labyrinth', security.crawlerProtection && 'Crawler Protection'].filter(Boolean).join(', ')
+        : botRes.errors?.[0]?.message,
+    });
+  }
+
+  // 4. Set Cloudflare nameservers in Namecheap
   const parts = domain.split('.');
   const sld = parts[0];
   const tld = parts.slice(1).join('.');

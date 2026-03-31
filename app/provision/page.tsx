@@ -19,8 +19,29 @@ type StepResult = { name: string; status: 'ok' | 'error'; detail?: string };
 type JobState = 'pending' | 'running' | 'done' | 'error';
 type Job = { id: string; domain: string; ip: string; state: JobState; steps: StepResult[]; nameservers?: string[] };
 type WizardStep = 1 | 2 | 3;
+type SecuritySettings = { botFightMode: boolean; aiLabyrinth: boolean; crawlerProtection: boolean };
 
 const STEP_NAMES = ['Add to Cloudflare', 'Add A record', 'Enable security', 'Set nameservers'];
+
+// ─── Toggle switch ────────────────────────────────────────────────────────────
+
+function Toggle({ label, description, checked, onChange }: {
+  label: string; description: string; checked: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-start gap-3 cursor-pointer select-none">
+      <div className="relative mt-0.5 flex-shrink-0">
+        <input type="checkbox" className="sr-only" checked={checked} onChange={e => onChange(e.target.checked)} />
+        <div className={`w-9 h-5 rounded-full transition-colors ${checked ? 'bg-indigo-600' : 'bg-gray-700'}`} />
+        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-4' : ''}`} />
+      </div>
+      <div>
+        <p className="text-sm text-gray-200">{label}</p>
+        <p className="text-xs text-gray-500">{description}</p>
+      </div>
+    </label>
+  );
+}
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
@@ -248,10 +269,12 @@ function Step1({
 // ─── Step 2: Configure records ────────────────────────────────────────────────
 
 function Step2({
-  domains, setDomains, onBack, onNext,
+  domains, setDomains, security, setSecurity, onBack, onNext,
 }: {
   domains: DomainEntry[];
   setDomains: (d: DomainEntry[]) => void;
+  security: SecuritySettings;
+  setSecurity: (s: SecuritySettings) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -322,6 +345,29 @@ function Step2({
         ))}
       </div>
 
+      {/* Security settings */}
+      <div className="border border-gray-800 rounded-lg p-4 mb-6 space-y-4">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Security Settings</p>
+        <Toggle
+          label="Bot Fight Mode"
+          description="Challenges requests from known bots with a JavaScript challenge."
+          checked={security.botFightMode}
+          onChange={v => setSecurity({ ...security, botFightMode: v })}
+        />
+        <Toggle
+          label="AI Labyrinth"
+          description="Blocks AI crawlers by serving them a maze of generated pages."
+          checked={security.aiLabyrinth}
+          onChange={v => setSecurity({ ...security, aiLabyrinth: v })}
+        />
+        <Toggle
+          label="Crawler Protection (JS challenge)"
+          description="Enables JS challenge for automated crawlers."
+          checked={security.crawlerProtection}
+          onChange={v => setSecurity({ ...security, crawlerProtection: v })}
+        />
+      </div>
+
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors">
           ← Back
@@ -347,9 +393,10 @@ function StepBadge({ step }: { step: StepResult | undefined }) {
 }
 
 function Step3({
-  domains, onBack,
+  domains, security, onBack,
 }: {
   domains: DomainEntry[];
+  security: SecuritySettings;
   onBack: () => void;
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -369,7 +416,7 @@ function Step3({
       const res = await fetch('/api/provision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: job.domain, ip: job.ip }),
+        body: JSON.stringify({ domain: job.domain, ip: job.ip, security }),
       });
       const data = await res.json();
       const allOk = data.steps?.every((s: StepResult) => s.status === 'ok');
@@ -423,8 +470,14 @@ function Step3({
             </div>
           )}
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-400">Steps per domain</span>
-            <span className="text-gray-300">Add CF zone · A record · Security · NS update</span>
+            <span className="text-gray-400">Security</span>
+            <span className="text-gray-300">
+              {[
+                security.botFightMode && 'Bot Fight Mode',
+                security.aiLabyrinth && 'AI Labyrinth',
+                security.crawlerProtection && 'Crawler Protection',
+              ].filter(Boolean).join(' · ') || 'None'}
+            </span>
           </div>
         </div>
       )}
@@ -500,6 +553,11 @@ function Step3({
 export default function ProvisionPage() {
   const [step, setStep] = useState<WizardStep>(1);
   const [domains, setDomains] = useState<DomainEntry[]>([]);
+  const [security, setSecurity] = useState<SecuritySettings>({
+    botFightMode: false,
+    aiLabyrinth: false,
+    crawlerProtection: false,
+  });
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-12">
@@ -526,6 +584,8 @@ export default function ProvisionPage() {
         <Step2
           domains={domains}
           setDomains={setDomains}
+          security={security}
+          setSecurity={setSecurity}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />
@@ -533,6 +593,7 @@ export default function ProvisionPage() {
       {step === 3 && (
         <Step3
           domains={domains}
+          security={security}
           onBack={() => setStep(2)}
         />
       )}
