@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   const anySecurityEnabled = security.botFightMode || security.aiLabyrinth || security.crawlerProtection;
   if (anySecurityEnabled) {
     const calls: Array<{ label: string; body: object }> = [];
-    if (security.botFightMode)  calls.push({ label: 'Bot Fight Mode', body: { fight_mode: true } });
+    if (security.botFightMode)  calls.push({ label: 'Bot Fight Mode', body: { fight_mode: true, enable_js: true } });
     if (security.aiLabyrinth)   calls.push({ label: 'AI Labyrinth',   body: { ai_bots_protection: 'block' } });
 
     const results = await Promise.all(
