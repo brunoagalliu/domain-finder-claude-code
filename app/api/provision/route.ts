@@ -18,7 +18,7 @@ async function cfetch(path: string, method: string, body?: object) {
   return res.json();
 }
 
-type SecuritySettings = { botFightMode?: boolean; aiLabyrinth?: boolean };
+type SecuritySettings = { botFightMode?: boolean; aiLabyrinth?: boolean; aiBotsProtection?: boolean };
 
 export async function POST(req: NextRequest) {
   const { domain, ip, security = {} as SecuritySettings } = await req.json();
@@ -87,11 +87,12 @@ export async function POST(req: NextRequest) {
   }
 
   // 3. Apply security settings (each as a separate call to avoid plan-level rejections)
-  const anySecurityEnabled = security.botFightMode || security.aiLabyrinth || security.crawlerProtection;
+  const anySecurityEnabled = security.botFightMode || security.aiLabyrinth || security.aiBotsProtection;
   if (anySecurityEnabled) {
     const body = {
-      ...(security.botFightMode ? { fight_mode: true, enable_js: true } : {}),
-      ...(security.aiLabyrinth  ? { ai_bots_protection: 'block' }       : {}),
+      ...(security.botFightMode     ? { fight_mode: true, enable_js: true } : {}),
+      ...(security.aiLabyrinth      ? { crawler_protection: 'enabled' }     : {}),
+      ...(security.aiBotsProtection ? { ai_bots_protection: 'block' }       : {}),
     };
     const r = await cfetch(`/zones/${zoneId}/bot_management`, 'PUT', body);
     console.log('[provision] bot_management:', JSON.stringify(r));
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
       name: 'Enable security',
       status: r.success ? 'ok' : 'error',
       detail: r.success
-        ? [security.botFightMode && 'Bot Fight Mode', security.aiLabyrinth && 'AI Labyrinth'].filter(Boolean).join(', ')
+        ? [security.botFightMode && 'Bot Fight Mode', security.aiLabyrinth && 'AI Labyrinth', security.aiBotsProtection && 'AI Bots Protection'].filter(Boolean).join(', ')
         : r.errors?.[0]?.message,
     });
   }

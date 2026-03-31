@@ -19,7 +19,7 @@ type StepResult = { name: string; status: 'ok' | 'error'; detail?: string };
 type JobState = 'pending' | 'running' | 'done' | 'error';
 type Job = { id: string; domain: string; ip: string; state: JobState; steps: StepResult[]; nameservers?: string[] };
 type WizardStep = 1 | 2 | 3;
-type SecuritySettings = { botFightMode: boolean; aiLabyrinth: boolean };
+type SecuritySettings = { botFightMode: boolean; aiLabyrinth: boolean; aiBotsProtection: boolean };
 
 const STEP_NAMES = ['Add to Cloudflare', 'Add A record', 'Enable security', 'Set nameservers'];
 
@@ -355,10 +355,16 @@ function Step2({
           onChange={v => setSecurity({ ...security, botFightMode: v })}
         />
         <Toggle
-          label="AI Bots Protection"
-          description="Blocks known AI crawlers (GPTBot, ClaudeBot, etc.) by user agent. Note: AI Labyrinth (honeypot pages) must be enabled separately in Cloudflare dashboard."
+          label="AI Labyrinth (Beta)"
+          description="Adds nofollow links with AI-generated content to disrupt bots ignoring crawling standards."
           checked={security.aiLabyrinth}
           onChange={v => setSecurity({ ...security, aiLabyrinth: v })}
+        />
+        <Toggle
+          label="AI Bots Protection"
+          description="Blocks known AI crawlers (GPTBot, ClaudeBot, etc.) by user agent."
+          checked={security.aiBotsProtection}
+          onChange={v => setSecurity({ ...security, aiBotsProtection: v })}
         />
       </div>
 
@@ -469,6 +475,7 @@ function Step3({
               {[
                 security.botFightMode && 'Bot Fight Mode',
                 security.aiLabyrinth && 'AI Labyrinth',
+                security.aiBotsProtection && 'AI Bots Protection',
               ].filter(Boolean).join(' · ') || 'None'}
             </span>
           </div>
@@ -546,7 +553,7 @@ function Step3({
 export default function ProvisionPage() {
   const [step, setStep] = useState<WizardStep>(1);
   const [domains, setDomains] = useState<DomainEntry[]>([]);
-  const [security, setSecurity] = useState<SecuritySettings>({ botFightMode: false, aiLabyrinth: false });
+  const [security, setSecurity] = useState<SecuritySettings>({ botFightMode: false, aiLabyrinth: false, aiBotsProtection: false });
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-12">
