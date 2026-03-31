@@ -19,7 +19,7 @@ type StepResult = { name: string; status: 'ok' | 'error'; detail?: string };
 type JobState = 'pending' | 'running' | 'done' | 'error';
 type Job = { id: string; domain: string; ip: string; state: JobState; steps: StepResult[]; nameservers?: string[] };
 type WizardStep = 1 | 2 | 3;
-type SecuritySettings = { botFightMode: boolean; aiLabyrinth: boolean; crawlerProtection: boolean };
+type SecuritySettings = { botFightMode: boolean; aiLabyrinth: boolean };
 
 const STEP_NAMES = ['Add to Cloudflare', 'Add A record', 'Enable security', 'Set nameservers'];
 
@@ -360,12 +360,6 @@ function Step2({
           checked={security.aiLabyrinth}
           onChange={v => setSecurity({ ...security, aiLabyrinth: v })}
         />
-        <Toggle
-          label="Crawler Protection (JS challenge)"
-          description="Enables JS challenge for automated crawlers."
-          checked={security.crawlerProtection}
-          onChange={v => setSecurity({ ...security, crawlerProtection: v })}
-        />
       </div>
 
       <div className="flex items-center gap-3">
@@ -475,7 +469,6 @@ function Step3({
               {[
                 security.botFightMode && 'Bot Fight Mode',
                 security.aiLabyrinth && 'AI Labyrinth',
-                security.crawlerProtection && 'Crawler Protection',
               ].filter(Boolean).join(' · ') || 'None'}
             </span>
           </div>
@@ -553,11 +546,7 @@ function Step3({
 export default function ProvisionPage() {
   const [step, setStep] = useState<WizardStep>(1);
   const [domains, setDomains] = useState<DomainEntry[]>([]);
-  const [security, setSecurity] = useState<SecuritySettings>({
-    botFightMode: false,
-    aiLabyrinth: false,
-    crawlerProtection: false,
-  });
+  const [security, setSecurity] = useState<SecuritySettings>({ botFightMode: false, aiLabyrinth: false });
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-12">

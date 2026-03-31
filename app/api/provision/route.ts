@@ -18,7 +18,7 @@ async function cfetch(path: string, method: string, body?: object) {
   return res.json();
 }
 
-type SecuritySettings = { botFightMode?: boolean; aiLabyrinth?: boolean; crawlerProtection?: boolean };
+type SecuritySettings = { botFightMode?: boolean; aiLabyrinth?: boolean };
 
 export async function POST(req: NextRequest) {
   const { domain, ip, security = {} as SecuritySettings } = await req.json();
@@ -90,9 +90,8 @@ export async function POST(req: NextRequest) {
   const anySecurityEnabled = security.botFightMode || security.aiLabyrinth || security.crawlerProtection;
   if (anySecurityEnabled) {
     const calls: Array<{ label: string; body: object }> = [];
-    if (security.botFightMode)      calls.push({ label: 'Bot Fight Mode',       body: { fight_mode: true } });
-    if (security.crawlerProtection) calls.push({ label: 'Crawler Protection',   body: { enable_js: true } });
-    if (security.aiLabyrinth)       calls.push({ label: 'AI Labyrinth',         body: { ai_bots_protection: 'block' } });
+    if (security.botFightMode)  calls.push({ label: 'Bot Fight Mode', body: { fight_mode: true } });
+    if (security.aiLabyrinth)   calls.push({ label: 'AI Labyrinth',   body: { ai_bots_protection: 'block' } });
 
     const results = await Promise.all(
       calls.map(c => cfetch(`/zones/${zoneId}/bot_management`, 'PUT', c.body).then(r => ({ ...c, ok: r.success, err: r.errors?.[0]?.message })))
