@@ -89,24 +89,18 @@ export async function POST(req: NextRequest) {
   // 3. Apply security settings (each as a separate call to avoid plan-level rejections)
   const anySecurityEnabled = security.botFightMode || security.aiLabyrinth || security.crawlerProtection;
   if (anySecurityEnabled) {
-    const calls: Array<{ label: string; body: object }> = [];
-    if (security.botFightMode)  calls.push({ label: 'Bot Fight Mode', body: { fight_mode: true, enable_js: true } });
-    if (security.aiLabyrinth)   calls.push({ label: 'AI Labyrinth',   body: { ai_bots_protection: 'block' } });
-
-    const results = await Promise.all(
-      calls.map(async c => {
-        const r = await cfetch(`/zones/${zoneId}/bot_management`, 'PUT', c.body);
-        console.log(`[provision] bot_management ${c.label}:`, JSON.stringify(r));
-        return { ...c, ok: r.success, err: r.errors?.[0]?.message };
-      })
-    );
-    const failed = results.filter(r => !r.ok);
+    const body = {
+      ...(security.botFightMode ? { fight_mode: true, enable_js: true } : {}),
+      ...(security.aiLabyrinth  ? { ai_bots_protection: 'block' }       : {}),
+    };
+    const r = await cfetch(`/zones/${zoneId}/bot_management`, 'PUT', body);
+    console.log('[provision] bot_management:', JSON.stringify(r));
     steps.push({
       name: 'Enable security',
-      status: failed.length === 0 ? 'ok' : 'error',
-      detail: failed.length === 0
-        ? results.map(r => r.label).join(', ')
-        : failed.map(r => `${r.label}: ${r.err}`).join(' · '),
+      status: r.success ? 'ok' : 'error',
+      detail: r.success
+        ? [security.botFightMode && 'Bot Fight Mode', security.aiLabyrinth && 'AI Labyrinth'].filter(Boolean).join(', ')
+        : r.errors?.[0]?.message,
     });
   }
 
