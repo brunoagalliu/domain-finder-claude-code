@@ -20,8 +20,9 @@ type JobState = 'pending' | 'running' | 'done' | 'error';
 type Job = { id: string; domain: string; ip: string; state: JobState; steps: StepResult[]; nameservers?: string[] };
 type WizardStep = 1 | 2 | 3;
 type SecuritySettings = { botFightMode: boolean; aiLabyrinth: boolean; aiBotsProtection: boolean };
+type NetworkSettings = { proxy: boolean; sslMode: 'flexible' | 'full' | 'none' };
 
-const STEP_NAMES = ['Add to Cloudflare', 'Add A record', 'Enable security', 'Set nameservers'];
+const STEP_NAMES = ['Add to Cloudflare', 'Add A record', 'Enable security', 'Set SSL/TLS', 'Set nameservers'];
 
 // ─── Toggle switch ────────────────────────────────────────────────────────────
 
@@ -269,12 +270,14 @@ function Step1({
 // ─── Step 2: Configure records ────────────────────────────────────────────────
 
 function Step2({
-  domains, setDomains, security, setSecurity, onBack, onNext,
+  domains, setDomains, security, setSecurity, network, setNetwork, onBack, onNext,
 }: {
   domains: DomainEntry[];
   setDomains: (d: DomainEntry[]) => void;
   security: SecuritySettings;
   setSecurity: (s: SecuritySettings) => void;
+  network: NetworkSettings;
+  setNetwork: (n: NetworkSettings) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -296,7 +299,37 @@ function Step2({
       <div className="flex items-center gap-3 mb-6 px-4 py-3 bg-gray-900 border border-gray-800 rounded-lg">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Record type</span>
         <span className="text-sm font-mono text-white bg-gray-800 px-2.5 py-1 rounded">A</span>
-        <span className="text-gray-600 text-xs ml-auto">TTL: Auto · Proxy: Off</span>
+        <span className="text-gray-600 text-xs ml-auto">TTL: Auto</span>
+      </div>
+
+      {/* Network settings */}
+      <div className="border border-gray-800 rounded-lg p-4 mb-6 space-y-4">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">DNS & Network</p>
+        <Toggle
+          label="Cloudflare Proxy"
+          description="Route traffic through Cloudflare (orange cloud). Disable for DNS-only."
+          checked={network.proxy}
+          onChange={v => setNetwork({ ...network, proxy: v })}
+        />
+        <div>
+          <p className="text-sm text-gray-300 font-medium mb-1">SSL/TLS Mode</p>
+          <p className="text-xs text-gray-500 mb-3">Encryption mode between Cloudflare and your origin server.</p>
+          <div className="flex gap-2">
+            {(['none', 'flexible', 'full'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setNetwork({ ...network, sslMode: mode })}
+                className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
+                  network.sslMode === mode
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                {mode === 'none' ? 'Don\'t set' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Global IP */}
@@ -393,10 +426,11 @@ function StepBadge({ step }: { step: StepResult | undefined }) {
 }
 
 function Step3({
-  domains, security, onBack,
+  domains, security, network, onBack,
 }: {
   domains: DomainEntry[];
   security: SecuritySettings;
+  network: NetworkSettings;
   onBack: () => void;
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -416,7 +450,7 @@ function Step3({
       const res = await fetch('/api/provision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: job.domain, ip: job.ip, security }),
+        body: JSON.stringify({ domain: job.domain, ip: job.ip, security, network }),
       });
       const data = await res.json();
       const allOk = data.steps?.every((s: StepResult) => s.status === 'ok');
@@ -554,6 +588,7 @@ export default function ProvisionPage() {
   const [step, setStep] = useState<WizardStep>(1);
   const [domains, setDomains] = useState<DomainEntry[]>([]);
   const [security, setSecurity] = useState<SecuritySettings>({ botFightMode: false, aiLabyrinth: false, aiBotsProtection: false });
+  const [network, setNetwork] = useState<NetworkSettings>({ proxy: false, sslMode: 'none' });
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-12">
@@ -582,6 +617,8 @@ export default function ProvisionPage() {
           setDomains={setDomains}
           security={security}
           setSecurity={setSecurity}
+          network={network}
+          setNetwork={setNetwork}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />
@@ -590,6 +627,7 @@ export default function ProvisionPage() {
         <Step3
           domains={domains}
           security={security}
+          network={network}
           onBack={() => setStep(2)}
         />
       )}

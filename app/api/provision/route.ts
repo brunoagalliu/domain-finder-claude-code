@@ -21,7 +21,7 @@ async function cfetch(path: string, method: string, body?: object) {
 type SecuritySettings = { botFightMode?: boolean; aiLabyrinth?: boolean; aiBotsProtection?: boolean };
 
 export async function POST(req: NextRequest) {
-  const { domain, ip, security = {} as SecuritySettings } = await req.json();
+  const { domain, ip, security = {} as SecuritySettings, network = { proxy: false, sslMode: 'none' } } = await req.json();
   const steps: StepResult[] = [];
 
   // 1. Add zone to Cloudflare
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     name: domain,
     content: ip,
     ttl: 1,
-    proxied: false,
+    proxied: !!network.proxy,
   });
 
   if (dnsRes.success) {
@@ -105,7 +105,17 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 4. Set Cloudflare nameservers in Namecheap
+  // 4. Set SSL/TLS mode
+  if (network.sslMode && network.sslMode !== 'none') {
+    const sslRes = await cfetch(`/zones/${zoneId}/settings/ssl`, 'PATCH', { value: network.sslMode });
+    steps.push({
+      name: 'Set SSL/TLS',
+      status: sslRes.success ? 'ok' : 'error',
+      detail: sslRes.success ? network.sslMode : sslRes.errors?.[0]?.message,
+    });
+  }
+
+  // 5. Set Cloudflare nameservers in Namecheap
   const parts = domain.split('.');
   const sld = parts[0];
   const tld = parts.slice(1).join('.');
