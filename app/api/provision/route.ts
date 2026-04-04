@@ -78,12 +78,29 @@ export async function POST(req: NextRequest) {
       (e: { code: number; message?: string }) =>
         e.code === 81057 || e.message?.toLowerCase().includes('already')
     );
-    steps.push({
-      name: 'Add A record',
-      status: duplicate ? 'ok' : 'error',
-      detail: duplicate ? 'Record already exists' : dnsRes.errors?.[0]?.message,
-    });
-    if (!duplicate) return NextResponse.json({ steps }, { status: 500 });
+    if (duplicate) {
+      // Record exists — fetch it and update proxy/IP in case they changed
+      const existing = await cfetch(`/zones/${zoneId}/dns_records?type=A&name=${domain}`, 'GET');
+      const recordId = existing.result?.[0]?.id;
+      if (recordId) {
+        const patchRes = await cfetch(`/zones/${zoneId}/dns_records/${recordId}`, 'PATCH', {
+          content: ip,
+          proxied: !!network.proxy,
+          ttl: 1,
+        });
+        steps.push({
+          name: 'Add A record',
+          status: patchRes.success ? 'ok' : 'error',
+          detail: patchRes.success ? 'Updated existing record' : patchRes.errors?.[0]?.message,
+        });
+        if (!patchRes.success) return NextResponse.json({ steps }, { status: 500 });
+      } else {
+        steps.push({ name: 'Add A record', status: 'ok', detail: 'Record already exists' });
+      }
+    } else {
+      steps.push({ name: 'Add A record', status: 'error', detail: dnsRes.errors?.[0]?.message });
+      return NextResponse.json({ steps }, { status: 500 });
+    }
   }
 
   // 3. Apply security settings (each as a separate call to avoid plan-level rejections)
