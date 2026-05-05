@@ -21,7 +21,7 @@ async function cfetch(path: string, method: string, body?: object) {
 type SecuritySettings = { botFightMode?: boolean; aiLabyrinth?: boolean; aiBotsProtection?: boolean };
 
 export async function POST(req: NextRequest) {
-  const { domain, ip, security = {} as SecuritySettings, network = { proxy: false, sslMode: 'none' } } = await req.json();
+  const { domain, ip, security = {} as SecuritySettings, network = { proxy: false, sslMode: 'none' }, recordType = 'A', cnameTarget = '' } = await req.json();
   const steps: StepResult[] = [];
 
   // 1. Add zone to Cloudflare
@@ -62,44 +62,58 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 2. Add A record (proxy off)
-  const dnsRes = await cfetch(`/zones/${zoneId}/dns_records`, 'POST', {
-    type: 'A',
-    name: domain,
-    content: ip,
-    ttl: 1,
-    proxied: !!network.proxy,
-  });
-
-  if (dnsRes.success) {
-    steps.push({ name: 'Add A record', status: 'ok' });
-  } else {
-    const duplicate = dnsRes.errors?.some(
-      (e: { code: number; message?: string }) =>
-        e.code === 81057 || e.message?.toLowerCase().includes('already')
-    );
-    if (duplicate) {
-      // Record exists — fetch it and update proxy/IP in case they changed
-      const existing = await cfetch(`/zones/${zoneId}/dns_records?type=A&name=${domain}`, 'GET');
-      const recordId = existing.result?.[0]?.id;
-      if (recordId) {
-        const patchRes = await cfetch(`/zones/${zoneId}/dns_records/${recordId}`, 'PATCH', {
-          content: ip,
-          proxied: !!network.proxy,
-          ttl: 1,
-        });
-        steps.push({
-          name: 'Add A record',
-          status: patchRes.success ? 'ok' : 'error',
-          detail: patchRes.success ? 'Updated existing record' : patchRes.errors?.[0]?.message,
-        });
-        if (!patchRes.success) return NextResponse.json({ steps }, { status: 500 });
-      } else {
-        steps.push({ name: 'Add A record', status: 'ok', detail: 'Record already exists' });
+  // 2. Add DNS records
+  if (recordType === 'CNAME') {
+    const cnameRecords = [{ name: '*', content: cnameTarget }, { name: domain, content: cnameTarget }];
+    let stepOk = true;
+    for (const rec of cnameRecords) {
+      const res = await cfetch(`/zones/${zoneId}/dns_records`, 'POST', {
+        type: 'CNAME', name: rec.name, content: rec.content, ttl: 1, proxied: !!network.proxy,
+      });
+      if (!res.success) {
+        const duplicate = res.errors?.some((e: { code: number; message?: string }) =>
+          e.code === 81057 || e.message?.toLowerCase().includes('already'));
+        if (duplicate) {
+          const existing = await cfetch(`/zones/${zoneId}/dns_records?type=CNAME&name=${rec.name === '*' ? `*.${domain}` : domain}`, 'GET');
+          const recordId = existing.result?.[0]?.id;
+          if (recordId) {
+            await cfetch(`/zones/${zoneId}/dns_records/${recordId}`, 'PATCH', {
+              content: rec.content, proxied: !!network.proxy, ttl: 1,
+            });
+          }
+        } else {
+          stepOk = false;
+          steps.push({ name: 'Add DNS records', status: 'error', detail: res.errors?.[0]?.message });
+          return NextResponse.json({ steps }, { status: 500 });
+        }
       }
+    }
+    if (stepOk) steps.push({ name: 'Add DNS records', status: 'ok', detail: `* → ${cnameTarget}, @ → ${cnameTarget}` });
+  } else {
+    const dnsRes = await cfetch(`/zones/${zoneId}/dns_records`, 'POST', {
+      type: 'A', name: domain, content: ip, ttl: 1, proxied: !!network.proxy,
+    });
+    if (dnsRes.success) {
+      steps.push({ name: 'Add DNS records', status: 'ok' });
     } else {
-      steps.push({ name: 'Add A record', status: 'error', detail: dnsRes.errors?.[0]?.message });
-      return NextResponse.json({ steps }, { status: 500 });
+      const duplicate = dnsRes.errors?.some((e: { code: number; message?: string }) =>
+        e.code === 81057 || e.message?.toLowerCase().includes('already'));
+      if (duplicate) {
+        const existing = await cfetch(`/zones/${zoneId}/dns_records?type=A&name=${domain}`, 'GET');
+        const recordId = existing.result?.[0]?.id;
+        if (recordId) {
+          const patchRes = await cfetch(`/zones/${zoneId}/dns_records/${recordId}`, 'PATCH', {
+            content: ip, proxied: !!network.proxy, ttl: 1,
+          });
+          steps.push({ name: 'Add DNS records', status: patchRes.success ? 'ok' : 'error', detail: patchRes.success ? 'Updated existing record' : patchRes.errors?.[0]?.message });
+          if (!patchRes.success) return NextResponse.json({ steps }, { status: 500 });
+        } else {
+          steps.push({ name: 'Add DNS records', status: 'ok', detail: 'Record already exists' });
+        }
+      } else {
+        steps.push({ name: 'Add DNS records', status: 'error', detail: dnsRes.errors?.[0]?.message });
+        return NextResponse.json({ steps }, { status: 500 });
+      }
     }
   }
 
