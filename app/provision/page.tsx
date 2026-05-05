@@ -21,7 +21,7 @@ type Job = { id: string; domain: string; ip: string; state: JobState; steps: Ste
 type WizardStep = 1 | 2 | 3;
 type SecuritySettings = { botFightMode: boolean; aiLabyrinth: boolean; aiBotsProtection: boolean };
 type NetworkSettings = { proxy: boolean; sslMode: 'flexible' | 'full' | 'none' };
-type RecordType = 'A' | 'CNAME';
+type RecordEntry = { id: string; type: 'A' | 'CNAME'; name: string; content: string };
 
 const STEP_NAMES = ['Add to Cloudflare', 'Add DNS records', 'Enable security', 'Set SSL/TLS', 'Set nameservers'];
 
@@ -271,56 +271,33 @@ function Step1({
 // ─── Step 2: Configure records ────────────────────────────────────────────────
 
 function Step2({
-  domains, setDomains, security, setSecurity, network, setNetwork,
-  recordType, setRecordType, cnameTarget, setCnameTarget, onBack, onNext,
+  domains, security, setSecurity, network, setNetwork, records, setRecords, onBack, onNext,
 }: {
   domains: DomainEntry[];
-  setDomains: (d: DomainEntry[]) => void;
   security: SecuritySettings;
   setSecurity: (s: SecuritySettings) => void;
   network: NetworkSettings;
   setNetwork: (n: NetworkSettings) => void;
-  recordType: RecordType;
-  setRecordType: (t: RecordType) => void;
-  cnameTarget: string;
-  setCnameTarget: (v: string) => void;
+  records: RecordEntry[];
+  setRecords: (r: RecordEntry[]) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
-  const [globalIp, setGlobalIp] = useState('');
+  function addRecord() {
+    setRecords([...records, { id: Math.random().toString(36).slice(2), type: 'A', name: '', content: '' }]);
+  }
+  function removeRecord(id: string) {
+    setRecords(records.filter(r => r.id !== id));
+  }
+  function updateRecord(id: string, patch: Partial<RecordEntry>) {
+    setRecords(records.map(r => r.id === id ? { ...r, ...patch } : r));
+  }
+
   const selected = domains.filter(d => d.selected);
-  const allHaveIp = selected.every(d => d.ip.trim());
-  const canNext = recordType === 'CNAME' ? cnameTarget.trim().length > 0 : allHaveIp;
-
-  function applyGlobalIp() {
-    setDomains(domains.map(d => d.selected ? { ...d, ip: globalIp } : d));
-  }
-
-  function setIp(name: string, ip: string) {
-    setDomains(domains.map(d => d.name === name ? { ...d, ip } : d));
-  }
+  const canNext = records.length > 0 && records.every(r => r.name.trim() && r.content.trim());
 
   return (
     <div>
-      {/* Record type selector */}
-      <div className="flex items-center gap-3 mb-6 px-4 py-3 bg-gray-900 border border-gray-800 rounded-lg">
-        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Record type</span>
-        <div className="flex gap-1">
-          {(['A', 'CNAME'] as RecordType[]).map(t => (
-            <button
-              key={t}
-              onClick={() => setRecordType(t)}
-              className={`px-3 py-1 rounded text-sm font-mono font-medium transition-colors ${
-                recordType === t ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-        <span className="text-gray-600 text-xs ml-auto">TTL: Auto</span>
-      </div>
-
       {/* Network settings */}
       <div className="border border-gray-800 rounded-lg p-4 mb-6 space-y-4">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">DNS & Network</p>
@@ -338,108 +315,79 @@ function Step2({
               <button
                 key={mode}
                 onClick={() => setNetwork({ ...network, sslMode: mode })}
-                className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
-                  network.sslMode === mode
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  network.sslMode === mode ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                 }`}
               >
-                {mode === 'none' ? 'Don\'t set' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                {mode === 'none' ? "Don't set" : mode.charAt(0).toUpperCase() + mode.slice(1)}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {recordType === 'CNAME' ? (
-        /* CNAME target — single input for all domains */
-        <div className="mb-6">
-          <label className="block text-xs text-gray-400 mb-1.5">CNAME target (applied to all domains)</label>
-          <input
-            type="text"
-            value={cnameTarget}
-            onChange={e => setCnameTarget(e.target.value)}
-            placeholder="e.g. orfanaan.com"
-            className="w-full font-mono bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500 text-sm"
-          />
-          <p className="text-xs text-gray-600 mt-2">Creates two records per domain: <span className="font-mono">* → target</span> and <span className="font-mono">@ → target</span></p>
+      {/* Records builder */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">DNS Records</p>
+          <p className="text-xs text-gray-500">Applied to all {selected.length} domains · TTL: Auto</p>
         </div>
-      ) : (
-        /* A record — global IP + per-domain overrides */
-        <>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex-1">
-              <label className="block text-xs text-gray-400 mb-1.5">Default IP (apply to all selected)</label>
+        <div className="border border-gray-800 rounded-lg overflow-hidden mb-3">
+          <div className="grid grid-cols-[80px_130px_1fr_32px] bg-gray-900 border-b border-gray-800 px-3 py-2 gap-2">
+            <span className="text-xs font-medium text-gray-400">Type</span>
+            <span className="text-xs font-medium text-gray-400">Name</span>
+            <span className="text-xs font-medium text-gray-400">Content</span>
+            <span />
+          </div>
+          {records.map(r => (
+            <div key={r.id} className="grid grid-cols-[80px_130px_1fr_32px] items-center gap-2 px-3 py-2.5 border-b border-gray-800/40 last:border-0 bg-gray-900/50">
+              <select
+                value={r.type}
+                onChange={e => updateRecord(r.id, { type: e.target.value as 'A' | 'CNAME' })}
+                className="font-mono bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-100 focus:outline-none focus:border-indigo-500 w-full"
+              >
+                <option>A</option>
+                <option>CNAME</option>
+              </select>
               <input
                 type="text"
-                value={globalIp}
-                onChange={e => setGlobalIp(e.target.value)}
-                placeholder="e.g. 1.2.3.4"
-                className="w-full font-mono bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500 text-sm"
+                value={r.name}
+                onChange={e => updateRecord(r.id, { name: e.target.value })}
+                placeholder="@ or *"
+                className="font-mono bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500 w-full"
               />
+              <input
+                type="text"
+                value={r.content}
+                onChange={e => updateRecord(r.id, { content: e.target.value })}
+                placeholder={r.type === 'A' ? '1.2.3.4' : 'target.com'}
+                className="font-mono bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500 w-full"
+              />
+              <button
+                onClick={() => removeRecord(r.id)}
+                disabled={records.length === 1}
+                className="text-gray-600 hover:text-red-400 disabled:opacity-30 transition-colors text-lg leading-none"
+              >×</button>
             </div>
-            <button
-              onClick={applyGlobalIp}
-              disabled={!globalIp.trim()}
-              className="mt-5 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-white text-sm rounded-lg transition-colors"
-            >
-              Apply to all
-            </button>
-          </div>
-          <div className="border border-gray-800 rounded-lg overflow-hidden mb-6 max-h-80 overflow-y-auto">
-            <div className="grid grid-cols-[1fr_180px] bg-gray-900 border-b border-gray-800 px-4 py-2">
-              <span className="text-xs font-medium text-gray-400">Domain</span>
-              <span className="text-xs font-medium text-gray-400">A Record IP</span>
-            </div>
-            {selected.map((d, i) => (
-              <div key={d.name} className={`grid grid-cols-[1fr_180px] items-center px-4 py-2 ${i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-900/50'}`}>
-                <span className="font-mono text-sm text-white">{d.name}</span>
-                <input
-                  type="text"
-                  value={d.ip}
-                  onChange={e => setIp(d.name, e.target.value)}
-                  placeholder="1.2.3.4"
-                  className="font-mono bg-gray-800 border border-gray-700 rounded px-2.5 py-1 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500 w-full"
-                />
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+          ))}
+        </div>
+        <button onClick={addRecord} className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
+          + Add record
+        </button>
+      </div>
 
       {/* Security settings */}
       <div className="border border-gray-800 rounded-lg p-4 mb-6 space-y-4">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Security Settings</p>
-        <Toggle
-          label="Bot Fight Mode"
-          description="Challenges requests from known bots with a JavaScript challenge."
-          checked={security.botFightMode}
-          onChange={v => setSecurity({ ...security, botFightMode: v })}
-        />
-        <Toggle
-          label="AI Labyrinth (Beta)"
-          description="Adds nofollow links with AI-generated content to disrupt bots ignoring crawling standards."
-          checked={security.aiLabyrinth}
-          onChange={v => setSecurity({ ...security, aiLabyrinth: v })}
-        />
-        <Toggle
-          label="AI Bots Protection"
-          description="Blocks known AI crawlers (GPTBot, ClaudeBot, etc.) by user agent."
-          checked={security.aiBotsProtection}
-          onChange={v => setSecurity({ ...security, aiBotsProtection: v })}
-        />
+        <Toggle label="Bot Fight Mode" description="Challenges requests from known bots with a JavaScript challenge." checked={security.botFightMode} onChange={v => setSecurity({ ...security, botFightMode: v })} />
+        <Toggle label="AI Labyrinth (Beta)" description="Adds nofollow links with AI-generated content to disrupt bots ignoring crawling standards." checked={security.aiLabyrinth} onChange={v => setSecurity({ ...security, aiLabyrinth: v })} />
+        <Toggle label="AI Bots Protection" description="Blocks known AI crawlers (GPTBot, ClaudeBot, etc.) by user agent." checked={security.aiBotsProtection} onChange={v => setSecurity({ ...security, aiBotsProtection: v })} />
       </div>
 
       <div className="flex items-center gap-3">
-        <button onClick={onBack} className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors">
-          ← Back
-        </button>
-        <button
-          onClick={onNext}
-          disabled={!canNext}
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          {canNext ? 'Next: Review →' : recordType === 'CNAME' ? 'Enter CNAME target' : `${selected.filter(d => !d.ip.trim()).length} domain(s) missing IP`}
+        <button onClick={onBack} className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors">← Back</button>
+        <button onClick={onNext} disabled={!canNext} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium rounded-lg transition-colors">
+          {canNext ? 'Next: Review →' : 'Complete all record fields'}
         </button>
       </div>
     </div>
@@ -455,13 +403,12 @@ function StepBadge({ step }: { step: StepResult | undefined }) {
 }
 
 function Step3({
-  domains, security, network, recordType, cnameTarget, onBack,
+  domains, security, network, records, onBack,
 }: {
   domains: DomainEntry[];
   security: SecuritySettings;
   network: NetworkSettings;
-  recordType: RecordType;
-  cnameTarget: string;
+  records: RecordEntry[];
   onBack: () => void;
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -469,7 +416,6 @@ function Step3({
   const [started, setStarted] = useState(false);
   const selected = domains.filter(d => d.selected);
 
-  const uniqueIps = useMemo(() => [...new Set(selected.map(d => d.ip))], [selected]);
 
   function updateJob(id: string, patch: Partial<Job>) {
     setJobs(prev => prev.map(j => j.id === id ? { ...j, ...patch } : j));
@@ -481,7 +427,7 @@ function Step3({
       const res = await fetch('/api/provision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: job.domain, ip: job.ip, security, network, recordType, cnameTarget }),
+        body: JSON.stringify({ domain: job.domain, security, network, records }),
       });
       const data = await res.json();
       const allOk = data.steps?.every((s: StepResult) => s.status === 'ok');
@@ -518,22 +464,14 @@ function Step3({
             <span className="text-gray-400">Domains to provision</span>
             <span className="text-white font-medium">{selected.length}</span>
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-400">Record type</span>
-            <span className="font-mono text-white">A · TTL Auto · Proxy Off</span>
+          <div className="flex items-start justify-between text-sm gap-4">
+            <span className="text-gray-400 flex-shrink-0">DNS records</span>
+            <div className="text-right font-mono text-xs text-white space-y-0.5">
+              {records.map(r => (
+                <div key={r.id}>{r.type} {r.name} → {r.content}</div>
+              ))}
+            </div>
           </div>
-          {uniqueIps.length === 1 && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">IP address</span>
-              <span className="font-mono text-white">{uniqueIps[0]}</span>
-            </div>
-          )}
-          {uniqueIps.length > 1 && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">IP addresses</span>
-              <span className="text-white">{uniqueIps.length} unique IPs</span>
-            </div>
-          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-400">Security</span>
             <span className="text-gray-300">
@@ -620,8 +558,7 @@ export default function ProvisionPage() {
   const [domains, setDomains] = useState<DomainEntry[]>([]);
   const [security, setSecurity] = useState<SecuritySettings>({ botFightMode: false, aiLabyrinth: false, aiBotsProtection: false });
   const [network, setNetwork] = useState<NetworkSettings>({ proxy: false, sslMode: 'none' });
-  const [recordType, setRecordType] = useState<RecordType>('A');
-  const [cnameTarget, setCnameTarget] = useState('');
+  const [records, setRecords] = useState<RecordEntry[]>([{ id: '1', type: 'A', name: '@', content: '' }]);
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-12">
@@ -647,15 +584,12 @@ export default function ProvisionPage() {
       {step === 2 && (
         <Step2
           domains={domains}
-          setDomains={setDomains}
           security={security}
           setSecurity={setSecurity}
           network={network}
           setNetwork={setNetwork}
-          recordType={recordType}
-          setRecordType={setRecordType}
-          cnameTarget={cnameTarget}
-          setCnameTarget={setCnameTarget}
+          records={records}
+          setRecords={setRecords}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />
@@ -665,8 +599,7 @@ export default function ProvisionPage() {
           domains={domains}
           security={security}
           network={network}
-          recordType={recordType}
-          cnameTarget={cnameTarget}
+          records={records}
           onBack={() => setStep(2)}
         />
       )}
