@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
       }
     }
   }
-  steps.push({ name: 'Add DNS records', status: 'ok', detail: records.map(r => `${r.type} ${r.name}`).join(', ') });
+  steps.push({ name: 'Add DNS records', status: 'ok', detail: records.map((r: RecordEntry) => `${r.type} ${r.name}`).join(', ') });
 
   // 3. Apply security settings (each as a separate call to avoid plan-level rejections)
   const anySecurityEnabled = security.botFightMode || security.aiLabyrinth || security.aiBotsProtection;
