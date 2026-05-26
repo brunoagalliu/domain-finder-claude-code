@@ -274,6 +274,9 @@ export default function Home() {
               {showHistory ? 'Hide history' : `History (${history.length})`}
             </button>
           )}
+          <Link href="/generator" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+            Generator
+          </Link>
           <Link href="/provision" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
             Provision
           </Link>
