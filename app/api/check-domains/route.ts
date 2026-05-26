@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { makeProxyFetch } from '@/lib/proxy-fetch';
+import { getOutboundIp } from '@/lib/outbound-ip';
 
 const NAMECHEAP_API_URL = 'https://api.namecheap.com/xml.response';
 
@@ -10,11 +11,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'domains array is required' }, { status: 400 });
   }
 
-  const { NAMECHEAP_API_USER, NAMECHEAP_API_KEY, NAMECHEAP_USERNAME, NAMECHEAP_CLIENT_IP } = process.env;
+  const { NAMECHEAP_API_USER, NAMECHEAP_API_KEY, NAMECHEAP_USERNAME } = process.env;
 
-  if (!NAMECHEAP_API_USER || !NAMECHEAP_API_KEY || !NAMECHEAP_USERNAME || !NAMECHEAP_CLIENT_IP) {
+  if (!NAMECHEAP_API_USER || !NAMECHEAP_API_KEY || !NAMECHEAP_USERNAME) {
     return NextResponse.json({ error: 'Namecheap API credentials not configured' }, { status: 500 });
   }
+
+  const clientIp = await getOutboundIp();
 
   const domainList = domains
     .map((d: string) => (d.includes('.') ? d : `${d}.com`))
@@ -24,7 +27,7 @@ export async function POST(req: NextRequest) {
     ApiUser: NAMECHEAP_API_USER,
     ApiKey: NAMECHEAP_API_KEY,
     UserName: NAMECHEAP_USERNAME,
-    ClientIp: NAMECHEAP_CLIENT_IP,
+    ClientIp: clientIp,
     Command: 'namecheap.domains.check',
     DomainList: domainList,
   });

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { makeProxyFetch } from '@/lib/proxy-fetch';
+import { getOutboundIp } from '@/lib/outbound-ip';
 
 const NC = 'https://api.namecheap.com/xml.response';
 
@@ -27,11 +28,12 @@ function parseDomainsFromXml(xml: string): NamecheapDomain[] {
 
 export async function GET() {
   const proxyFetch = makeProxyFetch();
+  const clientIp = await getOutboundIp();
   const base = {
     ApiUser: process.env.NAMECHEAP_API_USER!,
     ApiKey: process.env.NAMECHEAP_API_KEY!,
     UserName: process.env.NAMECHEAP_USERNAME!,
-    ClientIp: process.env.NAMECHEAP_CLIENT_IP!,
+    ClientIp: clientIp,
     Command: 'namecheap.domains.getList',
     PageSize: '100',
   };

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { makeProxyFetch } from '@/lib/proxy-fetch';
+import { getOutboundIp } from '@/lib/outbound-ip';
 
 const CF = 'https://api.cloudflare.com/client/v4';
 const NC = 'https://api.namecheap.com/xml.response';
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
     ApiUser: process.env.NAMECHEAP_API_USER!,
     ApiKey: process.env.NAMECHEAP_API_KEY!,
     UserName: process.env.NAMECHEAP_USERNAME!,
-    ClientIp: process.env.NAMECHEAP_CLIENT_IP!,
+    ClientIp: await getOutboundIp(),
     Command: 'namecheap.domains.dns.setCustom',
     SLD: sld,
     TLD: tld,
