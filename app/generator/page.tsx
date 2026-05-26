@@ -31,8 +31,15 @@ export default function GeneratorPage() {
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState<string | null>(null);
   const stopRef = useRef(false);
   const seenRef = useRef<Set<string>>(new Set());
+
+  function handleCopyDomain(domain: string) {
+    navigator.clipboard.writeText(domain);
+    setCopiedDomain(domain);
+    setTimeout(() => setCopiedDomain(null), 1500);
+  }
 
   async function handleStart() {
     stopRef.current = false;
@@ -189,10 +196,18 @@ export default function GeneratorPage() {
             {available.map((d, i) => (
               <div
                 key={d}
-                className={`px-4 py-2.5 flex items-center gap-2 ${i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-900/50'}`}
+                className={`px-3 py-2.5 flex items-center justify-between gap-2 group ${i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-900/50'}`}
               >
-                <span className="text-emerald-400 text-xs">✓</span>
-                <span className="font-mono text-sm text-white">{d}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-emerald-400 text-xs flex-shrink-0">✓</span>
+                  <span className="font-mono text-sm text-white truncate">{d}</span>
+                </div>
+                <button
+                  onClick={() => handleCopyDomain(d)}
+                  className="flex-shrink-0 text-xs text-gray-600 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  {copiedDomain === d ? 'Copied' : 'Copy'}
+                </button>
               </div>
             ))}
           </div>
