@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   const domainList = domains
-    .map((d: string) => (d.endsWith('.com') ? d : `${d}.com`))
+    .map((d: string) => (d.includes('.') ? d : `${d}.com`))
     .join(',');
 
   const params = new URLSearchParams({
