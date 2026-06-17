@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
     });
 
     results.push({ domain, steps });
+    await new Promise(r => setTimeout(r, 500));
   }
 
   return NextResponse.json({ results });
