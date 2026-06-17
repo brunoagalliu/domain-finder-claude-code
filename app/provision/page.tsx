@@ -567,9 +567,14 @@ export default function ProvisionPage() {
           <h1 className="text-3xl font-bold text-white tracking-tight">Domain Provisioner</h1>
           <p className="text-gray-400 mt-1 text-sm">Add domains to Cloudflare, set DNS records, and update nameservers in Namecheap.</p>
         </div>
-        <Link href="/" className="text-xs text-gray-500 hover:text-gray-300 transition-colors mt-1">
-          ← Domain Finder
-        </Link>
+        <div className="flex items-center gap-4 mt-1">
+          <Link href="/vercel" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+            Vercel →
+          </Link>
+          <Link href="/" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+            ← Domain Finder
+          </Link>
+        </div>
       </div>
 
       <StepIndicator current={step} />
