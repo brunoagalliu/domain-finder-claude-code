@@ -4,7 +4,6 @@ import { getOutboundIp } from '@/lib/outbound-ip';
 
 const VERCEL_API = 'https://api.vercel.com';
 const NC = 'https://api.namecheap.com/xml.response';
-const VERCEL_A_RECORD = '76.76.21.21';
 
 type StepResult = { name: string; status: 'ok' | 'error'; detail?: string };
 
@@ -84,7 +83,14 @@ export async function POST(req: NextRequest) {
       steps.push({ name: 'Add to Vercel', status: 'ok' });
     }
 
-    // 2. Get current Namecheap DNS records
+    // 2. Fetch the A record IP Vercel currently requires for this domain
+    let vercelARecord = '76.76.21.21';
+    try {
+      const configRes = await vfetch(`/v6/domains/${domain}/config`);
+      if (configRes.aValues?.length) vercelARecord = configRes.aValues[0];
+    } catch { /* fall back to default */ }
+
+    // 3. Get current Namecheap DNS records
     const getParams = new URLSearchParams({
       ApiUser: apiUser, ApiKey: apiKey, UserName: username, ClientIp: clientIp,
       Command: 'namecheap.domains.dns.getHosts', SLD: sld, TLD: tld,
@@ -99,11 +105,11 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    // 3. Merge: keep existing records, replace any @ A record with Vercel's
+    // 4. Merge: keep existing records, replace any @ A record with Vercel's
     const existing = parseHosts(getXml).filter(h => !(h.name === '@' && h.type === 'A'));
     const newHosts: NcHost[] = [
       ...existing,
-      { name: '@', type: 'A', address: VERCEL_A_RECORD, mxPref: '10', ttl: '1800' },
+      { name: '@', type: 'A', address: vercelARecord, mxPref: '10', ttl: '1800' },
     ];
 
     // 4. Set all DNS records back
@@ -128,7 +134,7 @@ export async function POST(req: NextRequest) {
     steps.push({
       name: 'Update DNS',
       status: setOk ? 'ok' : 'error',
-      detail: setOk ? `@ → ${VERCEL_A_RECORD}` : setErr ?? 'Failed to set DNS records',
+      detail: setOk ? `@ → ${vercelARecord}` : setErr ?? 'Failed to set DNS records',
     });
 
     results.push({ domain, steps });
