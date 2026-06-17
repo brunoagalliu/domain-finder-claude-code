@@ -69,10 +69,14 @@ export async function POST(req: NextRequest) {
     // 1. Add domain to Vercel project
     const vercelRes = await vfetch(`/v9/projects/${projectId}/domains`, 'POST', { name: domain });
     if (vercelRes.error) {
-      if (vercelRes.error.code === 'domain_already_in_project') {
+      const msg: string = vercelRes.error.message ?? '';
+      const alreadyExists = vercelRes.error.code === 'domain_already_in_project'
+        || msg.toLowerCase().includes('already in use')
+        || msg.toLowerCase().includes('already exists');
+      if (alreadyExists) {
         steps.push({ name: 'Add to Vercel', status: 'ok', detail: 'Already in project' });
       } else {
-        steps.push({ name: 'Add to Vercel', status: 'error', detail: vercelRes.error.message });
+        steps.push({ name: 'Add to Vercel', status: 'error', detail: msg });
         results.push({ domain, steps });
         continue;
       }
