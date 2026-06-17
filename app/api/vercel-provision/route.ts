@@ -4,6 +4,7 @@ import { getOutboundIp } from '@/lib/outbound-ip';
 
 const VERCEL_API = 'https://api.vercel.com';
 const NC = 'https://api.namecheap.com/xml.response';
+const VERCEL_NS = ['ns1.vercel-dns.com', 'ns2.vercel-dns.com'];
 
 type StepResult = { name: string; status: 'ok' | 'error'; detail?: string };
 
@@ -17,29 +18,6 @@ async function vfetch(path: string, method = 'GET', body?: object) {
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   return res.json();
-}
-
-interface NcHost {
-  name: string;
-  type: string;
-  address: string;
-  mxPref: string;
-  ttl: string;
-}
-
-function parseHosts(xml: string): NcHost[] {
-  const hosts: NcHost[] = [];
-  const regex = /<host[^>]+>/gi;
-  let m;
-  while ((m = regex.exec(xml)) !== null) {
-    const tag = m[0];
-    const get = (key: string) => tag.match(new RegExp(`${key}="([^"]*)"`, 'i'))?.[1] ?? '';
-    const name = get('Name');
-    const type = get('Type');
-    if (!name || !type) continue;
-    hosts.push({ name, type, address: get('Address'), mxPref: get('MXPref') || '10', ttl: get('TTL') || '1800' });
-  }
-  return hosts;
 }
 
 export async function POST(req: NextRequest) {
@@ -83,58 +61,23 @@ export async function POST(req: NextRequest) {
       steps.push({ name: 'Add to Vercel', status: 'ok' });
     }
 
-    // 2. Fetch the A record IP Vercel currently requires for this domain
-    let vercelARecord = '76.76.21.21';
-    try {
-      const configRes = await vfetch(`/v6/domains/${domain}/config`);
-      if (configRes.aValues?.length) vercelARecord = configRes.aValues[0];
-    } catch { /* fall back to default */ }
-
-    // 3. Get current Namecheap DNS records
-    const getParams = new URLSearchParams({
+    // 2. Set Vercel nameservers in Namecheap
+    const params = new URLSearchParams({
       ApiUser: apiUser, ApiKey: apiKey, UserName: username, ClientIp: clientIp,
-      Command: 'namecheap.domains.dns.getHosts', SLD: sld, TLD: tld,
-    });
-    const getRes = await proxyFetch(`${NC}?${getParams}`);
-    const getXml = await getRes.text();
-
-    if (getXml.includes('Status="ERROR"')) {
-      const err = getXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim();
-      steps.push({ name: 'Update DNS', status: 'error', detail: err ?? 'Could not fetch DNS records' });
-      results.push({ domain, steps });
-      continue;
-    }
-
-    // 4. Merge: keep existing records, replace any @ A record with Vercel's
-    const existing = parseHosts(getXml).filter(h => !(h.name === '@' && h.type === 'A'));
-    const newHosts: NcHost[] = [
-      ...existing,
-      { name: '@', type: 'A', address: vercelARecord, mxPref: '10', ttl: '1800' },
-    ];
-
-    // 4. Set all DNS records back
-    const setParams = new URLSearchParams({
-      ApiUser: apiUser, ApiKey: apiKey, UserName: username, ClientIp: clientIp,
-      Command: 'namecheap.domains.dns.setHosts', SLD: sld, TLD: tld,
-    });
-    newHosts.forEach((h, i) => {
-      const n = i + 1;
-      setParams.set(`HostName${n}`, h.name);
-      setParams.set(`RecordType${n}`, h.type);
-      setParams.set(`Address${n}`, h.address);
-      setParams.set(`MXPref${n}`, h.mxPref);
-      setParams.set(`TTL${n}`, h.ttl);
+      Command: 'namecheap.domains.dns.setCustom',
+      SLD: sld, TLD: tld,
+      Nameservers: VERCEL_NS.join(','),
     });
 
-    const setRes = await proxyFetch(`${NC}?${setParams}`);
-    const setXml = await setRes.text();
-    const setOk = setXml.includes('IsSuccess="true"');
-    const setErr = setXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim();
+    const nsRes = await proxyFetch(`${NC}?${params}`);
+    const nsXml = await nsRes.text();
+    const nsOk = nsXml.includes('Update="true"') || (nsXml.includes('Status="OK"') && !nsXml.includes('Status="ERROR"'));
+    const nsErr = nsXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim() ?? nsXml.slice(0, 200);
 
     steps.push({
-      name: 'Update DNS',
-      status: setOk ? 'ok' : 'error',
-      detail: setOk ? `@ → ${vercelARecord}` : setErr ?? 'Failed to set DNS records',
+      name: 'Set nameservers',
+      status: nsOk ? 'ok' : 'error',
+      detail: nsOk ? VERCEL_NS.join(', ') : nsErr,
     });
 
     results.push({ domain, steps });
