@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 const CONSONANTS = 'bcdfghjklmnpqrstvwxyz';
 const BATCH_SIZE = 50;
-const TLDS = ['.com', '.net', '.org', '.io', '.co', '.app', '.dev', '.info'];
+const TLDS = ['.com', '.net', '.org', '.io', '.co', '.app', '.dev', '.info', '.site'];
 
 function randomName(length: number) {
   let name = '';
