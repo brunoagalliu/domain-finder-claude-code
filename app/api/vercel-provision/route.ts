@@ -102,18 +102,50 @@ export async function POST(req: NextRequest) {
         if (configRes.aValues?.length) aIp = configRes.aValues[0];
       } catch { /* use fallback */ }
 
-      // GET existing Namecheap hosts, replace @ A record, SET back
+      // GET existing Namecheap hosts — if domain is on custom nameservers, reset to default first
       const getParams = new URLSearchParams({
         ApiUser: apiUser, ApiKey: apiKey, UserName: username, ClientIp: clientIp,
         Command: 'namecheap.domains.dns.getHosts', SLD: sld, TLD: tld,
       });
-      const getXml = await (await proxyFetch(`${NC}?${getParams}`)).text();
+      let getXml = await (await proxyFetch(`${NC}?${getParams}`)).text();
+
       if (getXml.includes('Status="ERROR"')) {
-        const err = getXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim();
-        steps.push({ name: 'Set A record', status: 'error', detail: err ?? 'Could not fetch DNS records' });
-        results.push({ domain, steps });
-        await new Promise(r => setTimeout(r, 500));
-        continue;
+        const errMsg = getXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim() ?? '';
+        const isCustomNs = errMsg.toLowerCase().includes('custom') || errMsg.toLowerCase().includes('nameserver');
+
+        if (!isCustomNs) {
+          steps.push({ name: 'Set A record', status: 'error', detail: errMsg || 'Could not fetch DNS records' });
+          results.push({ domain, steps });
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
+
+        // Reset to Namecheap default nameservers so we can manage DNS records
+        const resetParams = new URLSearchParams({
+          ApiUser: apiUser, ApiKey: apiKey, UserName: username, ClientIp: clientIp,
+          Command: 'namecheap.domains.dns.setDefault', SLD: sld, TLD: tld,
+        });
+        const resetXml = await (await proxyFetch(`${NC}?${resetParams}`)).text();
+        const resetOk = resetXml.includes('Update="true"') || (resetXml.includes('Status="OK"') && !resetXml.includes('Status="ERROR"'));
+        const resetErr = resetXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim();
+
+        steps.push({ name: 'Reset to Namecheap DNS', status: resetOk ? 'ok' : 'error', detail: resetErr });
+
+        if (!resetOk) {
+          results.push({ domain, steps });
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
+
+        // Re-fetch hosts now that we're back on Namecheap DNS
+        getXml = await (await proxyFetch(`${NC}?${getParams}`)).text();
+        if (getXml.includes('Status="ERROR"')) {
+          const err2 = getXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim();
+          steps.push({ name: 'Set A record', status: 'error', detail: err2 ?? 'Could not fetch DNS records after reset' });
+          results.push({ domain, steps });
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
       }
 
       const existing = parseHosts(getXml).filter(h => !(h.name === '@' && h.type === 'A'));
