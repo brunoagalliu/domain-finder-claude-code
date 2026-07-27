@@ -111,7 +111,11 @@ export async function POST(req: NextRequest) {
 
       if (getXml.includes('Status="ERROR"')) {
         const errMsg = getXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim() ?? '';
-        const isCustomNs = errMsg.toLowerCase().includes('custom') || errMsg.toLowerCase().includes('nameserver');
+        const isCustomNs = errMsg.toLowerCase().includes('custom')
+          || errMsg.toLowerCase().includes('nameserver')
+          || errMsg.toLowerCase().includes('dns server')
+          || errMsg.toLowerCase().includes('proper dns')
+          || errMsg.toLowerCase().includes('not using');
 
         if (!isCustomNs) {
           steps.push({ name: 'Set A record', status: 'error', detail: errMsg || 'Could not fetch DNS records' });
