@@ -5,7 +5,7 @@ import { getOutboundIp } from '@/lib/outbound-ip';
 const VERCEL_API = 'https://api.vercel.com';
 const NC = 'https://api.namecheap.com/xml.response';
 const VERCEL_NS = ['ns1.vercel-dns.com', 'ns2.vercel-dns.com'];
-const VERCEL_A_FALLBACK = '76.76.21.21';
+const VERCEL_A_FALLBACK = '216.150.1.1';
 
 type StepResult = { name: string; status: 'ok' | 'error'; detail?: string };
 interface NcHost { name: string; type: string; address: string; mxPref: string; ttl: string; }
@@ -95,11 +95,17 @@ export async function POST(req: NextRequest) {
         detail: nsOk ? VERCEL_NS.join(', ') : nsErr,
       });
     } else {
-      // Fetch the current A record IP from Vercel's config API
+      // Fetch the required A record IP from Vercel
       let aIp = VERCEL_A_FALLBACK;
       try {
-        const configRes = await vfetch(`/v6/domains/${domain}/config`);
-        if (configRes.aValues?.length) aIp = configRes.aValues[0];
+        const configRes = await vfetch(`/v9/projects/${projectId}/domains/${domain}`);
+        const aRecord = configRes.verification?.find((v: { type: string }) => v.type === 'A');
+        if (aRecord?.value) aIp = aRecord.value;
+        else {
+          // fallback: domain config endpoint
+          const cfg = await vfetch(`/v6/domains/${domain}/config`);
+          if (cfg.aValues?.length) aIp = cfg.aValues[0];
+        }
       } catch { /* use fallback */ }
 
       // GET existing Namecheap hosts — if domain is on custom nameservers, reset to default first
