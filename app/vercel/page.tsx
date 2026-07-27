@@ -39,6 +39,7 @@ export default function VercelProvisionPage() {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [mode, setMode] = useState<'nameservers' | 'arecord'>('nameservers');
   const [jobs, setJobs] = useState<Job[]>([]);
   const [provisioning, setProvisioning] = useState(false);
 
@@ -99,7 +100,7 @@ export default function VercelProvisionPage() {
         const res = await fetch('/api/vercel-provision', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domains: [domain] }),
+          body: JSON.stringify({ domains: [domain], mode }),
         });
         const data = await res.json();
         const result = data.results?.[0];
@@ -124,7 +125,7 @@ export default function VercelProvisionPage() {
       <div className="flex items-start justify-between mb-10">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Vercel Provisioner</h1>
-          <p className="text-gray-400 mt-1 text-sm">Add domains to your Vercel project and set the A record in Namecheap DNS.</p>
+          <p className="text-gray-400 mt-1 text-sm">Add domains to your Vercel project and configure DNS in Namecheap.</p>
         </div>
         <Link href="/provision" className="text-xs text-gray-500 hover:text-gray-300 transition-colors mt-1">
           ← Cloudflare Provisioner
@@ -222,14 +223,29 @@ export default function VercelProvisionPage() {
         )}
       </section>
 
-      {/* Provision button */}
+      {/* DNS mode + provision */}
       {selected.length > 0 && jobs.length === 0 && (
-        <button
-          onClick={handleProvision}
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          Provision {selected.length} domain{selected.length !== 1 ? 's' : ''}
-        </button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1 p-1 bg-gray-900 border border-gray-800 rounded-lg">
+            {(['nameservers', 'arecord'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  mode === m ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {m === 'nameservers' ? 'Nameservers' : 'A record'}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={handleProvision}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            Provision {selected.length} domain{selected.length !== 1 ? 's' : ''}
+          </button>
+        </div>
       )}
 
       {/* Results */}

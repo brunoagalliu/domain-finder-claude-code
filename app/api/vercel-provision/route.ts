@@ -5,8 +5,24 @@ import { getOutboundIp } from '@/lib/outbound-ip';
 const VERCEL_API = 'https://api.vercel.com';
 const NC = 'https://api.namecheap.com/xml.response';
 const VERCEL_NS = ['ns1.vercel-dns.com', 'ns2.vercel-dns.com'];
+const VERCEL_A_FALLBACK = '76.76.21.21';
 
 type StepResult = { name: string; status: 'ok' | 'error'; detail?: string };
+interface NcHost { name: string; type: string; address: string; mxPref: string; ttl: string; }
+
+function parseHosts(xml: string): NcHost[] {
+  const hosts: NcHost[] = [];
+  const regex = /<host[^>]+>/gi;
+  let m;
+  while ((m = regex.exec(xml)) !== null) {
+    const tag = m[0];
+    const get = (k: string) => tag.match(new RegExp(`${k}="([^"]*)"`, 'i'))?.[1] ?? '';
+    const name = get('Name'); const type = get('Type');
+    if (!name || !type) continue;
+    hosts.push({ name, type, address: get('Address'), mxPref: get('MXPref') || '10', ttl: get('TTL') || '1800' });
+  }
+  return hosts;
+}
 
 async function vfetch(path: string, method = 'GET', body?: object) {
   const res = await fetch(`${VERCEL_API}${path}`, {
@@ -21,7 +37,7 @@ async function vfetch(path: string, method = 'GET', body?: object) {
 }
 
 export async function POST(req: NextRequest) {
-  const { domains } = await req.json() as { domains: string[] };
+  const { domains, mode = 'nameservers' } = await req.json() as { domains: string[]; mode?: 'nameservers' | 'arecord' };
 
   const projectId = process.env.VERCEL_PROJECT_ID;
   if (!projectId || !process.env.VERCEL_TOKEN) {
@@ -61,24 +77,70 @@ export async function POST(req: NextRequest) {
       steps.push({ name: 'Add to Vercel', status: 'ok' });
     }
 
-    // 2. Set Vercel nameservers in Namecheap
-    const params = new URLSearchParams({
-      ApiUser: apiUser, ApiKey: apiKey, UserName: username, ClientIp: clientIp,
-      Command: 'namecheap.domains.dns.setCustom',
-      SLD: sld, TLD: tld,
-      Nameservers: VERCEL_NS.join(','),
-    });
+    // 2. Configure DNS in Namecheap
+    if (mode === 'nameservers') {
+      const params = new URLSearchParams({
+        ApiUser: apiUser, ApiKey: apiKey, UserName: username, ClientIp: clientIp,
+        Command: 'namecheap.domains.dns.setCustom',
+        SLD: sld, TLD: tld,
+        Nameservers: VERCEL_NS.join(','),
+      });
+      const nsRes = await proxyFetch(`${NC}?${params}`);
+      const nsXml = await nsRes.text();
+      const nsOk = nsXml.includes('Update="true"') || (nsXml.includes('Status="OK"') && !nsXml.includes('Status="ERROR"'));
+      const nsErr = nsXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim() ?? nsXml.slice(0, 200);
+      steps.push({
+        name: 'Set nameservers',
+        status: nsOk ? 'ok' : 'error',
+        detail: nsOk ? VERCEL_NS.join(', ') : nsErr,
+      });
+    } else {
+      // Fetch the current A record IP from Vercel's config API
+      let aIp = VERCEL_A_FALLBACK;
+      try {
+        const configRes = await vfetch(`/v6/domains/${domain}/config`);
+        if (configRes.aValues?.length) aIp = configRes.aValues[0];
+      } catch { /* use fallback */ }
 
-    const nsRes = await proxyFetch(`${NC}?${params}`);
-    const nsXml = await nsRes.text();
-    const nsOk = nsXml.includes('Update="true"') || (nsXml.includes('Status="OK"') && !nsXml.includes('Status="ERROR"'));
-    const nsErr = nsXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim() ?? nsXml.slice(0, 200);
+      // GET existing Namecheap hosts, replace @ A record, SET back
+      const getParams = new URLSearchParams({
+        ApiUser: apiUser, ApiKey: apiKey, UserName: username, ClientIp: clientIp,
+        Command: 'namecheap.domains.dns.getHosts', SLD: sld, TLD: tld,
+      });
+      const getXml = await (await proxyFetch(`${NC}?${getParams}`)).text();
+      if (getXml.includes('Status="ERROR"')) {
+        const err = getXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim();
+        steps.push({ name: 'Set A record', status: 'error', detail: err ?? 'Could not fetch DNS records' });
+        results.push({ domain, steps });
+        await new Promise(r => setTimeout(r, 500));
+        continue;
+      }
 
-    steps.push({
-      name: 'Set nameservers',
-      status: nsOk ? 'ok' : 'error',
-      detail: nsOk ? VERCEL_NS.join(', ') : nsErr,
-    });
+      const existing = parseHosts(getXml).filter(h => !(h.name === '@' && h.type === 'A'));
+      const newHosts = [...existing, { name: '@', type: 'A', address: aIp, mxPref: '10', ttl: '1800' }];
+
+      const setParams = new URLSearchParams({
+        ApiUser: apiUser, ApiKey: apiKey, UserName: username, ClientIp: clientIp,
+        Command: 'namecheap.domains.dns.setHosts', SLD: sld, TLD: tld,
+      });
+      newHosts.forEach((h, i) => {
+        const n = i + 1;
+        setParams.set(`HostName${n}`, h.name);
+        setParams.set(`RecordType${n}`, h.type);
+        setParams.set(`Address${n}`, h.address);
+        setParams.set(`MXPref${n}`, h.mxPref);
+        setParams.set(`TTL${n}`, h.ttl);
+      });
+
+      const setXml = await (await proxyFetch(`${NC}?${setParams}`)).text();
+      const setOk = setXml.includes('IsSuccess="true"');
+      const setErr = setXml.match(/<Error[^>]*>([^<]+)<\/Error>/)?.[1]?.trim();
+      steps.push({
+        name: 'Set A record',
+        status: setOk ? 'ok' : 'error',
+        detail: setOk ? `@ → ${aIp}` : setErr ?? 'Failed to set A record',
+      });
+    }
 
     results.push({ domain, steps });
     await new Promise(r => setTimeout(r, 500));
