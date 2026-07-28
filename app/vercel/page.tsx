@@ -88,14 +88,10 @@ export default function VercelProvisionPage() {
   function toggleAll() { setDomains(domains.map(d => ({ ...d, selected: !allSelected }))); }
   function toggle(name: string) { setDomains(domains.map(d => d.name === name ? { ...d, selected: !d.selected } : d)); }
 
-  async function handleProvision() {
-    if (!selected.length) return;
-    const domainNames = selected.map(d => d.name);
-    setJobs(domainNames.map(domain => ({ domain, state: 'pending', steps: [] })));
+  async function runProvision(domainNames: string[]) {
     setProvisioning(true);
-
     for (const domain of domainNames) {
-      setJobs(prev => prev.map(j => j.domain === domain ? { ...j, state: 'running' } : j));
+      setJobs(prev => prev.map(j => j.domain === domain ? { ...j, state: 'running', steps: [] } : j));
       try {
         const res = await fetch('/api/vercel-provision', {
           method: 'POST',
@@ -115,6 +111,25 @@ export default function VercelProvisionPage() {
       }
     }
     setProvisioning(false);
+  }
+
+  async function handleProvision() {
+    if (!selected.length) return;
+    const domainNames = selected.map(d => d.name);
+    setJobs(domainNames.map(domain => ({ domain, state: 'pending', steps: [] })));
+    await runProvision(domainNames);
+  }
+
+  async function handleRetryAll() {
+    const failed = jobs.filter(j => j.state === 'error').map(j => j.domain);
+    if (!failed.length) return;
+    setJobs(prev => prev.map(j => failed.includes(j.domain) ? { ...j, state: 'pending', steps: [] } : j));
+    await runProvision(failed);
+  }
+
+  async function handleRetrySingle(domain: string) {
+    setJobs(prev => prev.map(j => j.domain === domain ? { ...j, state: 'pending', steps: [] } : j));
+    await runProvision([domain]);
   }
 
   const doneCount = jobs.filter(j => j.state === 'done').length;
@@ -257,9 +272,17 @@ export default function VercelProvisionPage() {
               : <span className="text-gray-400">Done</span>}
             {doneCount > 0 && <span className="text-emerald-400 font-medium">{doneCount} succeeded</span>}
             {errorCount > 0 && <span className="text-red-400 font-medium">{errorCount} failed</span>}
+            {!provisioning && errorCount > 0 && (
+              <button
+                onClick={handleRetryAll}
+                className="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded-lg transition-colors"
+              >
+                Retry all failed
+              </button>
+            )}
             {!provisioning && (
               <button
-                onClick={() => { setJobs([]); }}
+                onClick={() => setJobs([])}
                 className="ml-auto text-xs text-gray-500 hover:text-gray-300"
               >
                 Clear
@@ -274,8 +297,16 @@ export default function VercelProvisionPage() {
                   <span className="font-mono text-sm text-white">{job.domain}</span>
                   {job.state === 'pending'  && <span className="text-xs text-gray-600">Waiting…</span>}
                   {job.state === 'running'  && <span className="text-xs text-indigo-400 animate-pulse">Running…</span>}
-                  {job.state === 'done'     && <span className="text-xs text-emerald-400 font-medium">Done</span>}
-                  {job.state === 'error'    && <span className="text-xs text-red-400 font-medium">Failed</span>}
+                  {job.state === 'done'  && <span className="text-xs text-emerald-400 font-medium">Done</span>}
+                  {job.state === 'error' && <span className="text-xs text-red-400 font-medium">Failed</span>}
+                  {job.state === 'error' && !provisioning && (
+                    <button
+                      onClick={() => handleRetrySingle(job.domain)}
+                      className="ml-auto text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
                 {job.steps.length > 0 && (
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
