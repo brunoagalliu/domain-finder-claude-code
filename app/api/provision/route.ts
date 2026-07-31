@@ -16,15 +16,28 @@ async function cfetch(path: string, method: string, body?: object) {
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    return { success: false, errors: [{ message: `HTTP ${res.status}: non-JSON response from Cloudflare` }] };
+  }
 }
 
 type SecuritySettings = { botFightMode?: boolean; aiLabyrinth?: boolean; aiBotsProtection?: boolean };
 type RecordEntry = { id: string; type: 'A' | 'CNAME'; name: string; content: string };
 
 export async function POST(req: NextRequest) {
-  const { domain, security = {} as SecuritySettings, network = { proxy: false, sslMode: 'none' }, records = [] as RecordEntry[] } = await req.json();
   const steps: StepResult[] = [];
+  try {
+    return await handleProvision(req, steps);
+  } catch (e) {
+    steps.push({ name: 'Unexpected error', status: 'error', detail: String(e) });
+    return NextResponse.json({ steps }, { status: 500 });
+  }
+}
+
+async function handleProvision(req: NextRequest, steps: StepResult[]) {
+  const { domain, security = {} as SecuritySettings, network = { proxy: false, sslMode: 'none' }, records = [] as RecordEntry[] } = await req.json();
 
   // 1. Add zone to Cloudflare
   let zoneId: string;
